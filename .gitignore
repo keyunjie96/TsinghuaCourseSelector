@@ -4,6 +4,8 @@
 *.jpg
 *.txt
 *.tif
+*.conf
+captcha/
 
 #################
 ## Eclipse
