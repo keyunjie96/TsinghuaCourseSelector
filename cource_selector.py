@@ -9,8 +9,13 @@
 
 
 # Import necessary modules
+import time
 import warnings
+import random
+
 import requests
+from tqdm import tqdm
+
 import urls
 import ipro
 import headers
@@ -29,11 +34,12 @@ class XuanKe():
         self.class_class = cc
         self.class_number = cn
         self.class_subnumber = cs
+        self.class_count = len(self.class_class)
         self.user = user
         self.pswd = pswd
-        self.gettoken_data = {"m": self.class_class + "Search",
+        self.gettoken_data = [{"m": self.class_class[class_id] + "Search",
                               "p_xnxq": self.semester,
-                              "tokenPriFlag": self.class_class, "is_zyrxk": "1"}
+                              "tokenPriFlag": self.class_class[class_id], "is_zyrxk": "1"} for class_id in range(self.class_count)]
         self.login_webaddr = urls.urlCook
         self.validator = urls.urlVali
         self.captcha_addr = urls.urlCapt
@@ -83,8 +89,8 @@ class XuanKe():
         return s
 
     # Get token for the first time from returned webpage
-    def gettoken(self, s):
-        gettoken_res = s.post(self.xkaddr, self.gettoken_data,
+    def gettoken(self, s, class_id):
+        gettoken_res = s.post(self.xkaddr, self.gettoken_data[class_id],
                               headers=self.gheader)
         if gettoken_res.url != self.xkaddr:
             s.close()
@@ -95,18 +101,18 @@ class XuanKe():
         return [s, token]
 
     # Select cource (no search needed which saves a hell lot of time!!)
-    def selection(self, s, token):
-        selection_data = {"m": "save" + str.capitalize(self.class_class) + "Kc",
+    def selection(self, s, token, class_id):
+        selection_data = {"m": "save" + str.capitalize(self.class_class[class_id]) + "Kc",
                           "page": "", "token": token, "p_sort.p1": "",
                           "p_sort.p2": "", "p_sort.asc1": "true",
                           "p_sort.asc2": "true", "p_xnxq": self.semester,
-                          "is_zyrxk": "", "tokenPriFlag": self.class_class,
-                          "p_kch": self.class_number, "p_kcm": "",
+                          "is_zyrxk": "", "tokenPriFlag": self.class_class[class_id],
+                          "p_kch": self.class_number[class_id], "p_kcm": "",
                           "p_kkdwnm": "", "p_kctsm": "", "p_rxklxm": "",
-                          "p_rx_id": self.semester + ";" + self.class_number +
-                          ";" + self.class_subnumber + ";", "goPageNumber": "1"}
+                          "p_rx_id": self.semester + ";" + self.class_number[class_id] +
+                          ";" + self.class_subnumber[class_id] + ";", "goPageNumber": "1"}
         selection_result = s.post(self.xkaddr, selection_data,
-                                  headers=self.gheader)
+                                    headers=self.gheader)
         if selection_result.url != self.xkaddr:
             s.close()
             raise XKException("Kicked offline. Relogining...")
@@ -119,18 +125,33 @@ class XuanKe():
         while True:
             # Return a processed session from login() function
             session = self.login()
-            try:
-                [session, token] = self.gettoken(session)
-            except XKException as reason:
-                print(str(reason) + "\n")
-                continue
-            try:
-                selection_res = self.selection(session, token)
-            except XKException as reason:
-                print(str(reason) + "\n")
-                continue
+            kick_off = False
+            patience = 4
+            while True:
+                if kick_off or patience == 0:
+                    break
+                for class_id in range(self.class_count):
+                    try:
+                        [session, token] = self.gettoken(session, class_id)
+                    except XKException as reason:
+                        print(str(reason) + "\n")
+                        kick_off = True
+                        break
+                    try:
+                        selection_res = self.selection(session, token, class_id)
+                        print(selection_res)
+                        if selection_res[0:3] == "请输入":
+                            patience -= 1
+                        else:
+                            patience = 4
+                        if patience == 0:
+                            break
+                    except XKException as reason:
+                        print(str(reason))
+                        continue
+                    time.sleep(random.uniform(1.5, 2.5))   
             # Process return result from selection
-            print(selection_res + "\n")
+            # print(selection_res + "\n")
             session.close()
             continue
 
@@ -138,9 +159,9 @@ class XuanKe():
 warnings.simplefilter("ignore")
 # Create class for cource selection
 sem = "2017-2018-1"
-cc = "rx"
-cn = "00240074"
-cs = "0"
-Myselection = XuanKe(sem, cc, cn, cs, "", "")
+cc = ["rx"] * 1 #class_class, e.g.:rx
+cn = ["00780461"] #class_number
+cs = ["92"] #class_subnumber
+Myselection = XuanKe(sem, cc, cn, cs, "USER", "PASSWORD")
 # Let's do this
 Myselection.main_process()
